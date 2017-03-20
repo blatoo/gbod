@@ -5,5 +5,5 @@ GBOD is an algorithm developed for anomaly detection for large datasets, it is e
 `OutlierDetection_GBOD_Usage.ipynb`: Detailed usage example with jupyter notebook
 `OutlierDetection_GBOD_Usage.html`: Detailed usage example with html
 
-**Notice: Under work...**
+# Notice: Under work...
 The Spark and Flink implementation will be added later.
