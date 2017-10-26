@@ -1,3 +1,17 @@
+"""
+@author: Ying Gu
+@copyright: Copyright 2017 Deutsches Forschungszentrum fuer Kuenstliche
+            Intelligenz GmbH or its licensors, as applicable.
+@license: This is free software: you can redistribute it and/or modify it under
+          the terms of the GNU General Public License as published by the Free
+          Software Foundation, either version 3 of the License, or (at your
+          option) any later version. You should have received a copy of the
+          GNU General Public License along with this software (COPYING).
+          If not, see <http://www.gnu.org/licenses/>.
+"""
+# __author__ = "Ying Gu"
+# __email__ = "connygy@gmail.com"
+
 import matplotlib
 import pandas as pd
 import numpy as np
@@ -47,6 +61,7 @@ def sample_df(df, n=None, frac=None, random_state = None, sort=True):
         return df.sample(n = n, frac = frac, random_state = random_state).sort_index()
     else:
         return df.sample(n=n, frac=frac, random_state=ranodm_state)
+    
 def get_KDKNN_score(df, k=5, leaf_size=10, scale=10):
     df_norm,_=normalize(df, scale=10)
     kdtree=neighbors.KDTree(df_norm, leaf_size)
@@ -133,7 +148,7 @@ class GBOD(object):
         # find the grid partition
         df_temp=df_norm.copy()
         for myCol in df_temp:
-            df_temp[df_temp[[myCol]] == self.n_partition] = self.n_partition-1
+            df_temp.loc[df_temp[myCol] == self.n_partition] = self.n_partition-1
 
         # rename the partition columns
         df_temp.columns=self.df.columns+'_partition'
@@ -145,7 +160,7 @@ class GBOD(object):
         
         return res, np_in_grid
     
-    def predLabel(self, outlier_percent=None):
+    def predLabel(self, outlier_percent=None, label="yes"):
         """ detect which grid is outlier grid
         Input:
         outlier_percent (float, between 0 and 100): default is original setted number
@@ -175,17 +190,26 @@ class GBOD(object):
         np_in_grid_cumsum = np_in_grid_sorted.cumsum()
         grid_info = pd.concat([np_in_grid_sorted, np_in_grid_cumsum], axis=1)
         grid_info.columns = ["points","cum_sum"]
-        grid_info.reset_index(inplace=True)
+        # Conny: 
+        # print(grid_info)
+        # grid_info.reset_index(inplace=True)
         
-        n_outlier_grids = bisect.bisect_right(grid_info.cum_sum, n_outliers)
-        print "n_outlier_grids = ", n_outlier_grids
-
+        n_outlier_grids = bisect.bisect_right(grid_info.cum_sum.tolist(), n_outliers)
+        # Conny
+        # print "n_outlier_grids = ", n_outlier_grids
+        
+        # Conny: 11.4.2017
         # write the outlier label for the grids
-        grid_info["pred_grid_label"] = "no"
-        grid_info.ix[0:n_outlier_grids, "pred_grid_label"] = "yes"
+        if label=="yes":
+            grid_info["pred_grid_label"] = "no"
+            grid_info.ix[0:n_outlier_grids, "pred_grid_label"] = "yes"
+        else:
+            grid_info["pred_grid_label"] = 0
+            grid_info.ix[0:n_outlier_grids, "pred_grid_label"] = 1
+            
         grid_info_mIndex = grid_info.copy()
-        grid_info.reset_index(level=tuple(np.arange(len(np_in_grid_sorted.index.names))), inplace=True)
-
+        # grid_info.reset_index(level=tuple(np.arange(len(np_in_grid_sorted.index.names))), inplace=True)
+        grid_info.reset_index(inplace=True)
         return grid_info, grid_info_mIndex
     
     def pred_center_bias_label(self, outlier_grid_frac=None):
@@ -218,7 +242,7 @@ class GBOD(object):
         """
         return pd.merge(self.res, grid_info, how='left').set_index(self.res.index)
     
-    def run_GBOD(self, outlier_percent=None, writeCSV=False):
+    def run_GBOD(self, outlier_percent=None, label='yes', writeCSV=False):
         """ Get the end result.
         Input:
         outlier_percent (float): a value between 0 and 100, determine how many points are outliers
@@ -233,10 +257,10 @@ class GBOD(object):
         else:
             self.outlier_percent = outlier_percent
         
-        grid_info, grid_info_mIndex = self.predLabel(outlier_percent)
+        grid_info, grid_info_mIndex = self.predLabel(outlier_percent, label=label)
         
         result = self.combine_result(grid_info).drop(["points", "cum_sum"], axis=1)
-        result.drop(['index'], axis=1, inplace=True)
+        # result.drop(['index'], axis=1, inplace=True)
         
         if writeCSV == True:
             result.to_csv("gbod_result_outlierPercent_"+str(self.outlier_percent)+".txt")
@@ -284,10 +308,10 @@ class GBOD(object):
         centerBiasLabel_origin (pd.DataFrame): detailed information of the grid center and point center.
         """
         if outlier_grid_frac == None:
-            print "outlier_percent = "+str(self.outlier_percent)
+            print ("outlier_percent = "+str(self.outlier_percent))
             outlier_grid_frac = self.get_n_outlier_grids()[1]
             
-        print "outlier_gird_frac = "+ str(outlier_grid_frac)
+        print ("outlier_gird_frac = "+ str(outlier_grid_frac))
 
         centerBiasLabel_origin = self.pred_center_bias_label(outlier_grid_frac)
         centerBiasLabel = centerBiasLabel_origin.loc[:, "center_bias_label"].reset_index()
@@ -350,7 +374,7 @@ class GBOD(object):
         """
         
         if outlier_grid_frac == None:
-            print "outlier_percent = "+str(self.outlier_percent)
+            print ("outlier_percent = "+str(self.outlier_percent))
             outlier_grid_frac = self.get_n_outlier_grids()[1]
         
         result = self.run_GBOD_center_bias(outlier_grid_frac)[0]
@@ -427,7 +451,7 @@ class GBOD(object):
                     alpha=0.5)
         plt.show()
         
-    def plotGridHist(self, bins = 50):
+    def plotGridHist(self, bins = 50, **kwargs):
         """ Plot the histogram of number of points in each grid.
         Input:
         bins (int): number of bins
@@ -438,7 +462,7 @@ class GBOD(object):
         width = 10
         height = 5
         fig = plt.figure(figsize=(width, height))
-        plt.hist(self.np_in_grid, bins=50)
+        plt.hist(self.np_in_grid, bins=50, **kwargs)
         plt.show()
         
     def plotGridHeatMap(self, fontsize=16):
@@ -584,6 +608,55 @@ class GBOD(object):
         F1 = 2.0*precision*recall/(precision+recall)
         
         return {"precision": precision, "recall": recall, "F1": F1}
+    
+def GBOD_P(df, partition_range=[5,20], outlier_percent=1):
+    '''Get the detailed information about outlier score
+    input:
+        df: dataframe
+        partition_range: [begin, end]
+        outlier_percent: 1-100 (numberic)
+    output:
+        df_score: a dataframe with outlier result for each p
+    '''
+    
+    def getScore(df_score_row):
+        res = df_score_row.tolist().count('yes')
+        return res
+
+    df_score=pd.DataFrame()
+    
+    for x in range(partition_range[0], partition_range[1]):
+        #Conny
+        #print 'round: '+str(x)
+        myGBOD = GBOD(df, n_partition=x,outlier_percent=outlier_percent)
+        result, _ = myGBOD.run_GBOD()
+        df_score['p='+str(x)]=result.pred_grid_label
+        
+    temp = df_score.apply(lambda row: getScore(row), axis=1)
+    df_score['score']=temp
+    
+    return df_score
+
+def GBOD_P_2(df, partition_range=[5,20], outlier_percent=1):
+    '''Get the outlier score
+    input:
+        df: dataframe
+        partition_range: [begin, end]
+        outlier_percent: 1-100 (numberic)
+    output:
+        df_score: a numpy array with outlier scores (integer)
+    '''
+
+    df_score=np.zeros(df.shape[0])
+    
+    for x in range(partition_range[0], partition_range[1]):
+#         print 'round: '+str(x)
+        myGBOD = GBOD(df, n_partition=x,outlier_percent=outlier_percent)
+        # result, _ = myGBOD.run_GBOD(label=1)
+        # df_score += result.pred_grid_label
+        df_score += myGBOD.run_GBOD(label=1)[0].pred_grid_label
+        
+    return df_score
         
         
 class KDKNN(object):
